@@ -1,0 +1,19 @@
+[package]
+name = "s3-checksum"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.58"
+aws-config = "0.15.0"
+aws-sdk-s3 = "0.15.0"
+aws-smithy-types = "0.45.0"
+aws-types = "0.15.0"
+clap = { version = "3.2.8", features = ["derive"] }
+futures-util = "0.3.21"
+hex = "0.4.3"
+sha2 = "0.10.2"
+tokio = { version = "1.19.2", features = ["full"] }
+tokio-stream = "0.1.9"
