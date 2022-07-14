@@ -1,29 +1,30 @@
 use std::sync::Arc;
 
 use anyhow::Result;
-use aws_sdk_s3::model::Object;
-use sha2::{Digest, Sha256};
 use tokio::sync::{mpsc::Sender, Mutex};
 use tokio::task::JoinHandle;
 use tokio_stream::StreamExt;
 
-use crate::dtos::ProcessedFile;
+use crate::dtos::{Algorithm, FileToProcess, ProcessedFile};
+use crate::hasher::Hasher;
 
 pub fn spawn(
     tx: Sender<ProcessedFile>,
+    algorithm: Algorithm,
     s3_client: aws_sdk_s3::Client,
     bucket: String,
-    files: Arc<Vec<Object>>,
+    files: Arc<Vec<FileToProcess>>,
     index: Arc<Mutex<usize>>,
 ) -> JoinHandle<Result<()>> {
-    tokio::spawn(async move { worker_loop(tx, s3_client, bucket, files, index).await })
+    tokio::spawn(async move { worker_loop(tx, algorithm, s3_client, bucket, files, index).await })
 }
 
 async fn worker_loop(
     tx: Sender<ProcessedFile>,
+    algorithm: Algorithm,
     s3_client: aws_sdk_s3::Client,
     bucket: String,
-    files: Arc<Vec<Object>>,
+    files: Arc<Vec<FileToProcess>>,
     index: Arc<Mutex<usize>>,
 ) -> Result<()> {
     loop {
@@ -35,41 +36,38 @@ async fn worker_loop(
         *guard += 1;
         drop(guard);
 
-        if let Err(err) = calculate_checksum(&tx, &s3_client, &bucket, file).await {
-            println!(
-                "ERROR: Unable to process {}: {}",
-                file.key.as_ref().unwrap(),
-                err
-            );
+        if let Err(err) = calculate_checksum(&tx, algorithm, &s3_client, &bucket, file).await {
+            println!("ERROR: Unable to process {}: {}", file.key, err);
         }
     }
 }
 
 async fn calculate_checksum(
     tx: &Sender<ProcessedFile>,
+    algorithm: Algorithm,
     s3_client: &aws_sdk_s3::Client,
     bucket: &str,
-    file: &Object,
+    file: &FileToProcess,
 ) -> Result<()> {
-    let key = file.key.as_ref().unwrap();
     let mut resp = s3_client
         .get_object()
         .bucket(bucket)
-        .key(key)
+        .key(&file.key)
         .send()
         .await?;
 
-    let mut hasher = Sha256::new();
+    let mut hasher = Hasher::new(algorithm);
     while let Some(bytes) = resp.body.try_next().await? {
-        hasher.update(&bytes);
+        hasher.write(&bytes);
     }
-    let checksum = hex::encode(hasher.finalize());
+    let checksum = hasher.finish();
 
     tx.send(ProcessedFile {
-        checksum,
-        key: key.to_string(),
-        size: file.size,
-        last_modified: file.last_modified,
+        key: file.key.to_string(),
+        size: resp.content_length,
+        actual_checksum: checksum,
+        expected_checksum: file.checksum.clone(),
+        last_modified: resp.last_modified,
     })
     .await?;
 
