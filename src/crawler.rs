@@ -60,12 +60,13 @@ async fn parse_checksum_file(
                 continue;
             }
 
-            assert_eq!(
-                hash.len(),
-                algorithm.get_hex_hash_len(),
-                "Hash length in file does not match algorithm {}",
-                algorithm
-            );
+            if hash.len() != algorithm.get_hex_hash_len() {
+                println!(
+                    "WARNING: Skipping line '{}' as '{}' is not a valid {} hash",
+                    line, hash, algorithm
+                );
+                continue;
+            }
 
             distribute_work(
                 &mut rx,

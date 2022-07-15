@@ -14,11 +14,12 @@ pub enum Algorithm {
 }
 
 impl Algorithm {
+    // Returns the number of characters in a hexidecimal hash, NOT the number of bits in the hash
     pub fn get_hex_hash_len(self) -> usize {
         match self {
-            Algorithm::Sha1 => 40,
-            Algorithm::Sha256 => 64,
-            Algorithm::Sha512 => 128,
+            Algorithm::Sha1 => 40, // 160 bits == 20 bytes == 40 chars
+            Algorithm::Sha256 => 64, // 256 bits == 32 bytes == 64 chars
+            Algorithm::Sha512 => 128, // 512 bits == 64 bytes == 128 chars
         }
     }
 }
