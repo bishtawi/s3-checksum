@@ -107,11 +107,11 @@ async fn crawl_bucket(
             }
         }
 
-        if resp.continuation_token.is_none() {
+        if resp.next_continuation_token.is_none() {
             break;
         }
 
-        continuation_token = resp.continuation_token;
+        continuation_token = resp.next_continuation_token;
     }
 
     Ok(())

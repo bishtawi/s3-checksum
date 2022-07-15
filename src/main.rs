@@ -6,6 +6,7 @@ use std::{collections::HashMap, ffi::OsStr, path::Path, sync::Arc};
 use anyhow::{anyhow, Result};
 use clap::Parser;
 use futures_util::future::join_all;
+use itertools::Itertools;
 use tokio::fs::File;
 use tokio::io::{AsyncWriteExt, BufWriter};
 use tokio::sync::mpsc::{Receiver, Sender};
@@ -18,6 +19,7 @@ mod aws;
 mod crawler;
 mod dtos;
 mod hasher;
+mod utils;
 mod worker;
 
 #[tokio::main]
@@ -77,26 +79,26 @@ async fn process_checksums(
     let mut stats: HashMap<String, (u64, i64)> = HashMap::new(); // (count, size)
     let mut errors: HashMap<String, String> = HashMap::new();
     while let Some(message) = processed_file_rx.recv().await {
-        let path = Path::new(&message.key);
-        let extension = path
-            .extension()
-            .or_else(|| path.file_name())
-            .and_then(OsStr::to_str)
-            .unwrap_or(&message.key)
-            .to_lowercase();
-        let (count, size) = stats.entry(extension).or_insert((0, 0));
-        *count += 1;
-        *size += message.size;
-        total_size += message.size;
-        total_count += 1;
-
         match message.actual_checksum {
             Ok(checksum) => {
+                let path = Path::new(&message.key);
+                let extension = path
+                    .extension()
+                    .or_else(|| path.file_name())
+                    .and_then(OsStr::to_str)
+                    .unwrap_or(&message.key)
+                    .to_lowercase();
+                let (count, size) = stats.entry(extension).or_insert((0, 0));
+                *count += 1;
+                *size += message.size;
+                total_size += message.size;
+                total_count += 1;
+
                 println!(
-                    "{} {}\t({} bytes / {})",
+                    "{} {}\t({} / {})",
                     checksum,
                     message.key,
-                    message.size,
+                    utils::display_bytes(message.size),
                     message
                         .last_modified
                         .and_then(|d| d.fmt(aws_smithy_types::date_time::Format::DateTime).ok())
@@ -115,6 +117,7 @@ async fn process_checksums(
                     .map(|c| !c.eq(&checksum))
                     .unwrap_or_default()
                 {
+                    println!("ERROR: {}:\tChecksum mismatch", message.key);
                     errors.insert(
                         message.key,
                         format!(
@@ -126,24 +129,33 @@ async fn process_checksums(
                 }
             }
             Err(err) => {
-                println!("ERROR: {}: {}", message.key, err);
+                println!("ERROR: {}:\tUnable to calculate checksum", message.key);
                 errors.insert(message.key, format!("{}", err));
             }
         };
     }
 
     println!("\nFile Counts:");
-    for (name, (count, size)) in &stats {
-        println!("{}: {} files ({} bytes)", name, count, size);
+    for (name, (count, size)) in stats.iter().sorted() {
+        println!(
+            "{}:\t{} files ({})",
+            name,
+            count,
+            utils::display_bytes(*size)
+        );
     }
-    println!("Total: {} files ({} bytes)", total_count, total_size);
+    println!(
+        "Total: {} files ({})",
+        total_count,
+        utils::display_bytes(total_size)
+    );
 
     if args.check.is_some() && errors.is_empty() {
         println!("\nAll checksums match!");
     } else if !errors.is_empty() {
         println!("\nError count: {}", errors.len());
-        for (key, err) in &errors {
-            println!("ERROR: {}: {}", key, err);
+        for (key, err) in errors.iter().sorted() {
+            println!("{}:\t{}", key, err);
         }
     }
 
