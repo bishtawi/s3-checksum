@@ -1,3 +1,4 @@
+use anyhow::Result;
 use aws_smithy_types::DateTime;
 use clap::Parser;
 use strum::Display;
@@ -51,6 +52,7 @@ pub struct Args {
     pub url: Option<String>,
 }
 
+#[derive(Debug)]
 pub struct FileToProcess {
     pub key: String,
     pub checksum: Option<String>,
@@ -60,7 +62,7 @@ pub struct FileToProcess {
 pub struct ProcessedFile {
     pub key: String,
     pub size: i64, // bytes,
-    pub actual_checksum: String,
+    pub actual_checksum: Result<String>,
     pub expected_checksum: Option<String>,
     pub last_modified: Option<DateTime>,
 }
