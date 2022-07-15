@@ -52,6 +52,11 @@ async fn parse_checksum_file(
                 .map(|p| !file.starts_with(p))
                 .unwrap_or_default()
             {
+                println!(
+                    "WARNING: Skipping '{}' as its outside of path '{}'",
+                    file,
+                    path.as_ref().unwrap()
+                );
                 continue;
             }
 
@@ -96,6 +101,10 @@ async fn crawl_bucket(
 
         if let Some(contents) = resp.contents {
             for object in contents {
+                if object.key.as_ref().map_or(true, |k| k.ends_with('/')) {
+                    continue;
+                }
+
                 distribute_work(
                     &mut rx,
                     FileToProcess {
